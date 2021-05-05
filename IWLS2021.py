@@ -37,5 +37,5 @@ def pla_obj_to_arff(pla, gera_arquivo=False, unique=False, path="tmp_iwls2020/AR
 if __name__ == "__main__":
     pla_obj = Functions.pla.pla_obj_factory("IWLS2021-files/pla_cifar10_chunk_12500.pla")
     j48tree_to_pla("../../tools/pla_memory_chunk_12500.j48", pla_obj.get_qt_inputs(), pla_obj.get_qt_outputs(), "tools/")
-    #pla_obj_to_arff(pla_obj, True, True, "IWLS2021-files")
+    # pla_obj_to_arff(pla_obj, True, True, "IWLS2021-files")
 
