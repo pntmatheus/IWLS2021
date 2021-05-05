@@ -1,0 +1,3 @@
+# Matheus - 01/05/2021
+Modifiquei o código do "aigsim" para tratar a opção "--supress".
+Com este parâmetro, o outpur do "aigsim" será apenas o vetor de saída do AIG e não os vetores de entrada+saída
