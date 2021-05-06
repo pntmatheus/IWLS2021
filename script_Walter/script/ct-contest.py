@@ -7,7 +7,7 @@ from sklearn import tree
 from sklearn.model_selection import GridSearchCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, make_scorer
-from sklearn.externals.six import StringIO
+from six import StringIO
 from IPython.display import Image
 from sklearn.tree import export_graphviz
 from sklearn.model_selection import train_test_split
@@ -92,7 +92,8 @@ for i in range(100):
         merged.close()
         
         trainning_name = 'ex{}_merged.train.pla'.format(benchmark_id)
-    
+
+    ############################################################################################
     # Read training and validation benchmarks
     i, o, p = read_iop(workDir + '/' + trainning_name)
     ts = tt2df(workDir + '/' + trainning_name)
