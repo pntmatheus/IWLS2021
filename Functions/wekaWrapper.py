@@ -54,6 +54,7 @@ def wekatree_to_termos(wekatree, qt_inputs):
     for linha in wekatree:
         attr, value = linha.replace(" ", "").split("=")
         pipes = attr.count("|")
+        # Pega apenas o número da feature
         attr_num = int(re.sub("\D", "", attr))
 
         if counter < pipes:

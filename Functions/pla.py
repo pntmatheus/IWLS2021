@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import re
 import os
 from typing import Optional, List
 
+from argh import dispatch
+
 from Functions.termo import Termo
+from multipledispatch import dispatch
 
 
+@dispatch(str)
 def pla_obj_factory(pla_path):
+    print("papai")
     """ Função que cria e retorna um objeto PLA
 
     Args:
@@ -60,20 +67,32 @@ def pla_obj_factory(pla_path):
     for termo in termos:
         termos_obj.append(Termo(termo))
 
-    pla_dict = {"qt_ins":            qt_ins,
-                "qt_outs":           qt_outs,
-                "type":              pla_type,
-                "qt_termos":         qt_termos,
-                "termos":            termos}
+    pla_dict = {"qt_ins": qt_ins,
+                "qt_outs": qt_outs,
+                "type": pla_type,
+                "qt_termos": qt_termos,
+                "termos": termos}
 
     pla_obj = Pla(nome, pla_dict["type"], pla_dict["qt_ins"], pla_dict["qt_outs"], termos_obj)
     return pla_obj
 
 
+@dispatch(list, str)
+def pla_obj_factory(termos: List[Termo], name) -> Pla:
+    if termos is not None:
+        qt_in = termos[0].get_qt_input()
+        qt_out = termos[0].get_qt_output()
+        pla_obj = Pla(name, None, qt_in, qt_out, termos)
+    else:
+        pla_obj = None
+
+    return pla_obj
+
+
 class Pla:
 
-    def __init__(self, nome, tipo, qt_inputs, qt_outputs, termos):
-        self.nome = nome
+    def __init__(self, name, tipo, qt_inputs, qt_outputs, termos):
+        self.nome = name
         self.type = tipo
         self.qt_inputs = qt_inputs
         self.qt_outputs = qt_outputs
@@ -90,6 +109,9 @@ class Pla:
 
     def get_qt_outputs(self):
         return self.qt_outputs
+
+    def get_type(self):
+        return self.type
 
     def get_total_pla_0(self):
         return self.__get_total__("0")
@@ -138,4 +160,31 @@ class Pla:
                 termos_output.append(termo)
         return termos_output
 
+    def pla_to_file(self, output_path=None, out_name=None):
+        output_file = ""
+        path = ""
 
+        if out_name is not None:
+            output_file = out_name
+        else:
+            output_file = self.nome
+
+        if output_path is not None:
+            path = "%s/%s.pla" % (output_path, output_file)
+        else:
+            path = "%s.pla" % output_file
+
+        with open(path, "w") as pla_file:
+            pla_file.write(".i %d\n" % self.get_qt_inputs())
+            pla_file.write(".o %d\n" % self.get_qt_outputs())
+            pla_file.write(".p %d\n" % len(self.termos))
+
+            if self.type is None:
+                pla_file.write(".type fr\n")
+            else:
+                pla_file.write(".type %s" % self.type)
+
+            for t in self.termos:
+                pla_file.write("%s %s\n" % (t.get_input(), t.get_output()))
+
+            pla_file.write(".e\n")

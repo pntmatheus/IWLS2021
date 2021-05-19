@@ -20,8 +20,14 @@ class Termo:
     def get_input(self):
         return self.input
 
+    def get_qt_input(self):
+        return len(self.input)
+
     def get_output(self):
         return self.output
+
+    def get_qt_output(self):
+        return len(self.output)
 
     def get_total_0(self):
         total = self.__conta_variavel__("0")
