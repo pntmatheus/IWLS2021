@@ -1,11 +1,9 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 import gc
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
-from PIL import Image as im
 
 from IWLS2021 import unpickle
 
