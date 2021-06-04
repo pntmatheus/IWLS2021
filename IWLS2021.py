@@ -1,6 +1,7 @@
 import time
 import pickle
 import numpy as np
+import sklearn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import tree
 from sklearn.model_selection import cross_val_score
@@ -303,7 +304,9 @@ if __name__ == "__main__":
 
     dict_train = load_and_get_binarized(lista2)
 
-    clf = RandomForestClassifier(n_estimators=25, n_jobs=-1, max_depth=30)
+    clf = RandomForestClassifier(n_estimators=25, n_jobs=-1)
+
+    print('The scikit-learn version is {}.'.format(sklearn.__version__))
 
     print((np.mean(cross_val_score(clf, dict_train.get(0), dict_train.get(1), cv=10))))
 
