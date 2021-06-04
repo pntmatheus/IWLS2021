@@ -307,6 +307,9 @@ if __name__ == "__main__":
 
     print((np.mean(cross_val_score(clf, dict_train.get(0), dict_train.get(1), cv=10))))
 
+    print(clf.estimators_[0].get_depth())
+    print(clf.estimators_[0].get_n_leaves())
+
     # clf.fit(dict_train.get(0), dict_train.get(1))
     # print('Training accuracy: ', clf.score(dict_train.get(0), dict_train.get(1)))
     #
