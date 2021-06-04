@@ -20,6 +20,9 @@ class Termo:
     def get_input(self):
         return self.input
 
+    def set_input(self, input):
+        self.input = input
+
     def get_qt_input(self):
         return len(self.input)
 

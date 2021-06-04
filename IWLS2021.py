@@ -1,14 +1,76 @@
 import time
-
-import numpy as np
-from sklearn.tree import DecisionTreeClassifier
-from sklearn import tree
-import Functions.pla
-from Functions.SKlearn_ops import cifar10_class_to_one_hot
 import pickle
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn import tree
+from sklearn.model_selection import cross_val_score
+
+from Functions.SKlearn_ops import make_sklearn_simple_tree, sklearntree_to_termos
+from Functions.CIFAR10_ops import cifar10_class_to_one_hot, unpickle, get_cifar10_ndarray_bits, compact_img, \
+    compact_images, load_and_get_binarized, load_and_get_one_binarized
 import subprocess
 import shlex
 import ntpath
+
+from Functions.pla import pla_obj_factory
+
+
+def compacted_tree_to_original_cifar10_pla(compacted_tree_path, outname):
+
+    compacted_termos = sklearntree_to_termos(compacted_tree_path, 6144)
+
+    for termo in compacted_termos:
+
+        foo_list = ""
+        flag = int(termo.get_qt_input() / 2)
+        for i in range(flag):
+            foo_list = foo_list + "------%s%s" % (termo.get_input()[i*2], termo.get_input()[(i*2)+1])
+        termo.set_input(foo_list)
+    pla_obj = pla_obj_factory(compacted_termos, outname)
+    pla_obj.pla_to_file()
+
+
+def cifar10_default_decision_tree_pipeline(train_files, train_labels, output_name):
+    inputs = 24576
+    make_sklearn_simple_tree(train_files, train_labels, output_name)
+    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
+    pla_obj = pla_obj_factory(termos, output_name)
+    pla_obj.pla_to_file()
+
+
+def cifar10_custom_decision_tree_pipeline(train_files, train_labels, output_name, pla_inputs):
+    inputs = pla_inputs
+    make_sklearn_simple_tree(train_files, train_labels, output_name)
+    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
+    pla_obj = pla_obj_factory(termos, output_name)
+    pla_obj.pla_to_file()
+
+
+def cifar10_to_pla_one_hot():
+    train_files = ["data_batch_1"]
+                #"data_batch_2",
+                #"data_batch_3",
+                #"data_batch_4",
+                #"data_batch_5"]
+
+    pla_lines = [".i 24576", ".o 10", ".p 10000"]
+
+    for f in train_files:
+        dados = unpickle("CIFAR10/python/%s" % f)
+        for counter,v in enumerate(dados.get(b'data')):
+            inputs = np.unpackbits(v)
+            inputs = list(inputs)
+            #print(inputs)
+            #print(inputs)
+            pla_lines.append("%s %s" % ("".join(["%s" % i for i in inputs]), cifar10_class_to_one_hot(dados.get(b'labels')[counter])))
+        print("Finalizou arquivo!!!")
+
+    pla_lines.append(".e")
+
+    with open('data_batch_1.pla', mode='w') as arq:
+        for line in pla_lines:
+            arq.write(line + "\n")
+
 
 def pla_obj_to_arff(pla, gera_arquivo=False, unique=False, path="tmp_iwls2020/ARFF"):
     # Retira os repetidos
@@ -41,26 +103,6 @@ def pla_obj_to_arff(pla, gera_arquivo=False, unique=False, path="tmp_iwls2020/AR
             for i in conteudo:
                 arquivo.write(i + "\n")
 
-
-def unpickle(file):
-    with open(file, 'rb') as fo:
-        dict = pickle.load(fo, encoding='bytes')
-    return dict
-
-
-def make_sklearn_simple_tree(train, labels, tree_out_name):
-    # Definition of the classifier
-    clf = DecisionTreeClassifier(
-        random_state=9856230,
-        criterion='gini',
-        max_depth=50,
-        ccp_alpha=0.015
-    )
-
-    clf.fit(train, labels)
-
-    with open("%s.tree" % tree_out_name, "w") as arquivo:
-        arquivo.write(tree.export_text(clf, max_depth=1000))
 
 
 def train_and_make_decicion_tree():
@@ -202,29 +244,120 @@ def aig_cifar10_accuracy(aig_simulation_path, cifar10_label_path):
             flag += 1
     print(flag)
 
+def check_cifar10_datasets_c_and_python():
+    fsize = 10000 * (32 * 32 * 3) + 10000
+    buffr = np.zeros(fsize, dtype='uint8')
+
+    for i in range(1):
+        with open("CIFAR10/bin/data_batch_1.bin", "rb") as bin:
+            buffr[i * fsize:(i + 1) * fsize] = np.frombuffer(bin.read(), 'B')
+    print(buffr.shape)
+
+    labels = buffr[::3073]
+    pixels = np.delete(buffr, np.arange(0, buffr.size, 3073))
+    images = pixels.reshape(-1, 3072)
+
+    print(labels.shape)
+    print(pixels.shape)
+    print(images.shape)
+
+    print(np.unpackbits(images[0][0]))
+    print(labels[0:30])
+
+    teste = get_cifar10_ndarray_bits("data_batch_1")
+
+    for counter, img in enumerate(images):
+        lista = []
+        for i in img:
+            t = np.unpackbits(i)
+            for y in t:
+                lista.append(y)
+        new_arr = np.array(lista)
+
+        test = new_arr == teste[0][counter]
+
+        if not test.all():
+            print("Tá Mal")
+
 
 if __name__ == "__main__":
-    gabaritos = ["PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_labels_data_batch_1.txt",
-                 "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_labels_data_batch_2.txt",
-                 "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_labels_data_batch_3.txt",
-                 "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_labels_data_batch_4.txt",
-                 "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_labels_data_batch_5.txt"]
-
-    #respostas = ["PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-resyn2-x1_data_batch_1.result",
-    #             "PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-resyn2-x1_data_batch_2.result",
-    #             "PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-resyn2-x1_data_batch_3.result",
-    #             "PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-resyn2-x1_data_batch_4.result",
-    #             "PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-resyn2-x1_data_batch_5.result"]
+    np.set_printoptions(threshold=np.inf)
 
     #saida = aigsim_cifar10_simulation("PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-RAW.aig",
     #                                  "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_inputs_data_batch_1.txt",
     #                                  "PLA_dump/teste_aigsim_saida_python.result")
 
-    time.sleep(30)
+    start = time.time()
+
+    lista = ["CIFAR10/bit-imgs/2-msb-compacted/data_batch_1_binarized",
+             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_2_binarized",
+             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_3_binarized",
+             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_4_binarized",
+             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_5_binarized"]
+
+    lista2 = ["CIFAR10/bit-imgs/original/data_batch_1_binarized",
+              "CIFAR10/bit-imgs/original/data_batch_2_binarized",
+              "CIFAR10/bit-imgs/original/data_batch_3_binarized",
+              "CIFAR10/bit-imgs/original/data_batch_4_binarized",
+              "CIFAR10/bit-imgs/original/data_batch_5_binarized"]
+
+    dict_train = load_and_get_binarized(lista2)
+
+    clf = RandomForestClassifier(n_estimators=25, n_jobs=-1, max_depth=30)
+
+    print((np.mean(cross_val_score(clf, dict_train.get(0), dict_train.get(1), cv=10))))
+
+    # clf.fit(dict_train.get(0), dict_train.get(1))
+    # print('Training accuracy: ', clf.score(dict_train.get(0), dict_train.get(1)))
+    #
+    # with open("RandomForest-de1-estimator-0.tree", "w") as arquivo:
+    #     arquivo.write(tree.export_text(clf.estimators_[0], max_depth=1000))
+    #
+    # compacted_tree_to_original_cifar10_pla("RandomForest-de1-estimator-0.tree",
+    #                                        "RandomForest-de1-estimator-0-original-size.pla")
+
+    # for counter, rtree in enumerate(clf.estimators_):
+    #     with open("RandomForest-estimator-%d.tree" % counter, "w") as arquivo:
+    #         arquivo.write(tree.export_text(rtree, max_depth=1000))
+
+    # for i in range(10):
+    #     compacted_tree_to_original_cifar10_pla("RandomForest-estimator-%d.tree" % int(i), "RandomForest-estimator-%d-original-size.pla" % int(i))
+
+    print("Tempo: %d" % (time.time() - start))
+    time.sleep(60000)
+
+    # cifar10_custom_decision_tree_pipeline(dict_train.get(0), dict_train.get(1), "data_batch_1_2_3_4_5_MEMORY_compacted_dtree", dict_train.get(0).shape[1])
+
+    # compacted_tree_to_original_cifar10_pla("data_batch_1_2_3_4_5_MEMORY_compacted_dtree.tree", "teste_function_compacted_pla")
+
+    # teste = compact_images(dict_train.get(0), 2)
+    #
+    # print(teste.shape)
+    # print(dict_train.get(0).shape)
+    #
+    # print("Tempo: %d" % (time.time() - start))
+    # time.sleep(600)
+    #teste = compact_images(train.get(0), 2)
+    #print(teste.shape)
+
+    #teste = unpickle("data_batch_1_binarized")
+    #print("Tempo: %d" % (time.time()-start))
+
+    #print("Tempo: %d" % (time.time() - start))
+    #start = time.time()
+
+
+    #print("Tempo: %d" % (time.time() - start))
+    #print("Foi!! Também")
+    #print("Dictionary pickled")
+    #time.sleep(33330)
+
+    # Treinar com Decision Tree
+    #cifar10_default_decision_tree_pipeline(train.get(0), train.get(1), "data_batch_1_MEMORY_dtree")
+
+
+
+
+    time.sleep(33330)
+
     train_and_make_decicion_tree()
-
-    respostas = create_simulation_files_for_cifar10("PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-RAW.aig")
-    print(respostas)
-
-    for counter, r in enumerate(respostas):
-        aig_cifar10_accuracy(r, gabaritos[counter])

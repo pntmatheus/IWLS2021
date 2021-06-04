@@ -1,18 +1,23 @@
 from Functions.termo import Termo
 from Functions.pla import pla_obj_factory
+from Functions.CIFAR10_ops import cifar10_class_to_one_hot
+from sklearn.tree import DecisionTreeClassifier
+from sklearn import tree
 
-def cifar10_class_to_one_hot(int_class):
-    classes = {0: "0000000001",  # airplane
-               1: "0000000010",  # automobile
-               2: "0000000100",  # bird
-               3: "0000001000",  # cat
-               4: "0000010000",  # deer
-               5: "0000100000",  # dog
-               6: "0001000000",  # frog
-               7: "0010000000",  # horse
-               8: "0100000000",  # ship
-               9: "1000000000"}  # truck
-    return classes.get(int_class)
+
+def make_sklearn_simple_tree(train, labels, tree_out_name):
+    # Definition of the classifier
+    clf = DecisionTreeClassifier(
+        random_state=26525,
+        criterion='gini',
+        #max_depth=15
+        #ccp_alpha=0.015
+    )
+
+    clf.fit(train, labels)
+
+    with open("%s.tree" % tree_out_name, "w") as arquivo:
+        arquivo.write(tree.export_text(clf, max_depth=1000))
 
 
 def sklearntree_to_termos(tree_path, qt_inputs):
@@ -38,6 +43,8 @@ def sklearntree_to_termos(tree_path, qt_inputs):
             if "class" in linha:
                 # out_class = linha.split(":")[0].replace("|", "")
                 out_class = linha.split(":")[1]
+                # Por causa das RandomForests!!
+                out_class = out_class.replace(".0", "")
                 pre_termos.append("%s %s" % ("".join(linha_pla), cifar10_class_to_one_hot(int(out_class))))
             else:
                 # Remove "feature_"

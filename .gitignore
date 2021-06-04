@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 PLA_dump/*
+CIFAR10/bit-imgs
