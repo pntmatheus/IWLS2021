@@ -1,8 +1,38 @@
+import os
+
 from Functions.termo import Termo
 from Functions.pla import pla_obj_factory
 from Functions.CIFAR10_ops import cifar10_class_to_one_hot
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn import tree
+
+
+def rf_train_and_export(dataset, max_depth, n_estimators, rf_name, out_folder):
+    clf = random_forest_train(dataset, max_depth, n_estimators=n_estimators)
+    print("RF Trained!!!")
+    export_random_forest_trees(clf, rf_name, out_folder)
+    print("%s exported at %s folder!!!" % (rf_name, out_folder))
+
+
+def export_random_forest_trees(rf_model, rf_name, out_folder):
+    # make folder if dows not exist
+    try:
+        os.mkdir(out_folder)
+    except FileExistsError:
+        pass
+
+    for counter, estimator in enumerate(rf_model.estimators_):
+        with open("%s/%s--%d-%d.tree" % (out_folder, rf_name, counter, (len(rf_model) - 1)), "w") as file:
+            file.write(tree.export_text(estimator, max_depth=1000))
+
+
+
+
+def random_forest_train(dataset, max_depth, n_estimators):
+    clf = RandomForestClassifier(n_estimators=n_estimators, n_jobs=-1, max_depth=max_depth)
+    clf.fit(dataset.get(0), dataset.get(1))
+    return clf
 
 
 def make_sklearn_simple_tree(train, labels, tree_out_name):
@@ -80,5 +110,8 @@ def sklearntree_to_termos(tree_path, qt_inputs):
         termos.append(Termo(t))
     return termos
 
+
 def sklearntree_to_pla(tree_path, qt_inputs, output_file):
-    return None
+    termos = sklearntree_to_termos("%s" % tree_path, qt_inputs)
+    pla_obj = pla_obj_factory(termos, output_file)
+    pla_obj.pla_to_file()

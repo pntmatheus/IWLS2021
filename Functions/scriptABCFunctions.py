@@ -35,9 +35,9 @@ def gera_abc_aig(arquivo_pla, nome_aig, cmds=False):
     tempo_inicial = time.time()
 
     if not cmds:
-        comando = "./tools/abc -c \'read_pla %s; strash; write %s\'" % (arquivo_pla, nome_aig)
+        comando = "./tools/abc -c \'read_plamo %s; strash; write %s\'" % (arquivo_pla, nome_aig)
     else:
-        comando = "./tools/abc -c \'read_pla %s; strash; %swrite %s\'" % (arquivo_pla, "".join(["%s; " % i for i in cmds]), nome_aig)
+        comando = "./tools/abc -c \'read_plamo %s; strash; %swrite %s\'" % (arquivo_pla, "".join(["%s; " % i for i in cmds]), nome_aig)
 
     abc_cmd = subprocess.Popen(shlex.split(comando), stdout=subprocess.PIPE)
     # O retorno desta funcao sera [0] = stdout e [1] = sterr (erro)

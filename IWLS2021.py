@@ -1,12 +1,13 @@
+import os
 import time
 import pickle
 import numpy as np
-import sklearn
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import tree
-from sklearn.model_selection import cross_val_score
+import shutil
+from sklearn.cluster import KMeans
 
-from Functions.SKlearn_ops import make_sklearn_simple_tree, sklearntree_to_termos
+from Functions.scriptABCFunctions import gera_abc_aig
+from Functions.SKlearn_ops import make_sklearn_simple_tree, sklearntree_to_termos, sklearntree_to_pla
+from Functions.SKlearn_ops import rf_train_and_export
 from Functions.CIFAR10_ops import cifar10_class_to_one_hot, unpickle, get_cifar10_ndarray_bits, compact_img, \
     compact_images, load_and_get_binarized, load_and_get_one_binarized
 import subprocess
@@ -15,11 +16,132 @@ import ntpath
 
 from Functions.pla import pla_obj_factory
 
+cifar10_integers = ["CIFAR10/bit-imgs/integer/data_batch_1",
+                    "CIFAR10/bit-imgs/integer/data_batch_2",
+                    "CIFAR10/bit-imgs/integer/data_batch_3",
+                    "CIFAR10/bit-imgs/integer/data_batch_4",
+                    "CIFAR10/bit-imgs/integer/data_batch_5"]
 
-def compacted_tree_to_original_cifar10_pla(compacted_tree_path, outname):
+data_batches = ["CIFAR10/bit-imgs/2-msb-compacted/data_batch_1_binarized_2msb",
+                "CIFAR10/bit-imgs/2-msb-compacted/data_batch_2_binarized_2msb",
+                "CIFAR10/bit-imgs/2-msb-compacted/data_batch_3_binarized_2msb",
+                "CIFAR10/bit-imgs/2-msb-compacted/data_batch_4_binarized_2msb",
+                "CIFAR10/bit-imgs/2-msb-compacted/data_batch_5_binarized_2msb"]
+
+
+def iwls21_team_pipeline(dataset, max_depth, n_estimators, rf_name, out_folder, remove_pla=False):
+    tree_folder = "%s/tree" % out_folder
+    aig_folder = "%s/aig" % out_folder
+
+    try:
+        os.mkdir(out_folder)
+        print("pasta small2 ok")
+    except FileExistsError:
+        print("pasta small2 jah existia")
+        pass
+
+    try:
+        os.mkdir(tree_folder)
+        print("pasta tree ok")
+    except FileExistsError:
+        print("pasta tree ja existia")
+        pass
+
+    try:
+        os.mkdir(aig_folder)
+        print("pasta aig ok")
+    except FileExistsError:
+        print("pasta aig ja existia")
+        pass
+
+    # train and export RF model
+    rf_train_and_export(dataset, max_depth, n_estimators, rf_name, tree_folder)
+
+    # Convert trees to aig
+    all_trees_to_aig(tree_folder, aig_folder, remove_pla=remove_pla)
+
+    print("OK!!!")
+
+
+def all_plas_to_aig(folder, aig_folder):
+    pla_files = [x for x in os.scandir(folder)]
+    #print(pla_files[0].path)
+    #print(type(pla_files[0]))
+    for pla in pla_files:
+        pla_to_aig(pla, aig_folder)
+
+
+def all_trees_to_aig(tree_folder, aig_folder, compacted=False, remove_pla=False):
+    tree_files = [x for x in os.scandir(tree_folder)]
+    trees_path = []
+    for i in tree_files:
+        trees_path.append(i.path)
+
+    # make pla folder
+    try:
+        os.mkdir("%s/pla" % aig_folder)
+    except FileExistsError:
+        pass
+
+    compacted_trees_to_original_cifar10_pla(trees_path, "%s/pla" % aig_folder)
+    all_plas_to_aig("%s/pla" % aig_folder, aig_folder)
+    if remove_pla:
+        shutil.rmtree("%s/pla" % aig_folder)
+
+def pla_to_aig(pla_osdirentry, out_folder):
+    filename = pla_osdirentry.name.replace(".pla", "")
+    cmds = ["resyn2", "resyn2", "resyn2", "resyn2", "resyn3", "resyn3", "resyn3", "resyn2", "resyn2"]
+    print(gera_abc_aig("\'%s\'" % pla_osdirentry.path, "\'%s/%s.aig\'" % (out_folder, filename), cmds))
+
+
+def func_tree_to_aig():
+    path = "PLA_dump/PRELIMINAR_SOLUTIONS/Large/RandomForest_AND_Voter/full-bit"
+    cmds = ["resyn2", "resyn2", "resyn2", "resyn2", "resyn3", "resyn3", "resyn3", "resyn2", "resyn2"]
+
+    filename = "RandomForest-binarized-FULL_inputs-0-20"
+
+    sklearntree_to_pla("%s/tree/%s.tree" % (path, filename), 24576, "%s/pla/%s" % (path, filename))
+    print(gera_abc_aig("\'%s/pla/%s.pla\'" % (path, filename), "\'%s/aig/%s.aig\'" % (path, filename), cmds))
+
+#def cifar10_default_inputs():
+#    return unpickle("DEFAULT-CIFAR10-VARIABLES.pickled")
+
+
+#def cifar10_default_outputs(tree_id=None):
+
+#    if tree_id is not None:
+#        values = []
+#        for i in range(10):
+#            values.append("C%dt%d" % (i, tree_id))
+#        return values
+#    else:
+#        return ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"]
+
+
+#def make_pla_variables_labels(type, tree_cifar_id=None):
+#    switcher = {
+#        "cifar10_default_inputs": cifar10_default_inputs(),
+#        "cifar10_default_outputs": cifar10_default_outputs(tree_id=tree_cifar_id)
+#    }
+
+#    return switcher.get(type)
+
+
+def compacted_trees_to_original_cifar10_pla(compacted_tree_paths, out_folder):
+    out_names = []
+    for counter, tree in enumerate(compacted_tree_paths):
+        tree_name = ntpath.basename(tree)
+        print(tree_name)
+        out_name = "%s/%s" % (out_folder, tree_name)
+        print(out_name)
+        compacted_tree_to_original_cifar10_pla(tree, out_name)
+        out_names.append(out_name + ".pla")
+    return out_names
+
+
+def compacted_tree_to_original_cifar10_pla(compacted_tree_path, outname, in_labels=None, out_labels=None):
 
     compacted_termos = sklearntree_to_termos(compacted_tree_path, 6144)
-
     for termo in compacted_termos:
 
         foo_list = ""
@@ -28,167 +150,49 @@ def compacted_tree_to_original_cifar10_pla(compacted_tree_path, outname):
             foo_list = foo_list + "------%s%s" % (termo.get_input()[i*2], termo.get_input()[(i*2)+1])
         termo.set_input(foo_list)
     pla_obj = pla_obj_factory(compacted_termos, outname)
-    pla_obj.pla_to_file()
+    pla_obj.pla_to_file(in_labels=in_labels, out_labels=out_labels)
 
 
-def cifar10_default_decision_tree_pipeline(train_files, train_labels, output_name):
-    inputs = 24576
-    make_sklearn_simple_tree(train_files, train_labels, output_name)
-    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
-    pla_obj = pla_obj_factory(termos, output_name)
-    pla_obj.pla_to_file()
+#def cifar10_default_decision_tree_pipeline(train_files, train_labels, output_name):
+#    inputs = 24576
+#    make_sklearn_simple_tree(train_files, train_labels, output_name)
+#    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
+#    pla_obj = pla_obj_factory(termos, output_name)
+#    pla_obj.pla_to_file()
 
 
-def cifar10_custom_decision_tree_pipeline(train_files, train_labels, output_name, pla_inputs):
-    inputs = pla_inputs
-    make_sklearn_simple_tree(train_files, train_labels, output_name)
-    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
-    pla_obj = pla_obj_factory(termos, output_name)
-    pla_obj.pla_to_file()
+#def cifar10_custom_decision_tree_pipeline(train_files, train_labels, output_name, pla_inputs):
+#    inputs = pla_inputs
+#    make_sklearn_simple_tree(train_files, train_labels, output_name)
+#    termos = sklearntree_to_termos("%s.tree" % output_name, inputs)
+#    pla_obj = pla_obj_factory(termos, output_name)
+#   pla_obj.pla_to_file()
 
 
-def cifar10_to_pla_one_hot():
-    train_files = ["data_batch_1"]
-                #"data_batch_2",
-                #"data_batch_3",
+#def cifar10_to_pla_one_hot():
+#    train_files = ["data_batch_1"]
+#                #"data_batch_2",
+#                #"data_batch_3",
                 #"data_batch_4",
                 #"data_batch_5"]
 
-    pla_lines = [".i 24576", ".o 10", ".p 10000"]
+#    pla_lines = [".i 24576", ".o 10", ".p 10000"]
 
-    for f in train_files:
-        dados = unpickle("CIFAR10/python/%s" % f)
-        for counter,v in enumerate(dados.get(b'data')):
-            inputs = np.unpackbits(v)
-            inputs = list(inputs)
-            #print(inputs)
-            #print(inputs)
-            pla_lines.append("%s %s" % ("".join(["%s" % i for i in inputs]), cifar10_class_to_one_hot(dados.get(b'labels')[counter])))
-        print("Finalizou arquivo!!!")
+#    for f in train_files:
+#        dados = unpickle("CIFAR10/python/%s" % f)
+#        for counter,v in enumerate(dados.get(b'data')):
+#            inputs = np.unpackbits(v)
+#            inputs = list(inputs)
+#            #print(inputs)
+#            #print(inputs)
+#           pla_lines.append("%s %s" % ("".join(["%s" % i for i in inputs]), cifar10_class_to_one_hot(dados.get(b'labels')[counter])))
+#        print("Finalizou arquivo!!!")
 
-    pla_lines.append(".e")
+#    pla_lines.append(".e")
 
-    with open('data_batch_1.pla', mode='w') as arq:
-        for line in pla_lines:
-            arq.write(line + "\n")
-
-
-def pla_obj_to_arff(pla, gera_arquivo=False, unique=False, path="tmp_iwls2020/ARFF"):
-    # Retira os repetidos
-    if unique:
-        pla.turn_termos_unique()
-
-    conteudo = list()
-    # Adicionar primeira linha do ARFF
-    conteudo.append("@relation %s" % pla.get_nome().replace(".pla", ""))
-
-    # Adicionar os atributos de entrada no ARFF
-    for i in range(pla.get_qt_inputs()):
-        conteudo.append("@attribute a%d {0,1}" % (i))
-
-    # Adicionar os atributos de saida no ARFF
-    #for i in range(pla.get_qt_outputs()):
-    conteudo.append("@attribute output {0000000001, 0000000010, 0000000100, 0000001000, 0000010000, 0000100000, "
-                    "0001000000, 0010000000, 0100000000, 1000000000}")
-
-    # Adicionar o dataset
-    conteudo.append("@data")
-    for t in pla.get_termos():
-        termo_format = "%s%s" % (
-            #"".join(["%s," % i for i in t.get_input()]), "".join(["%s" % i for i in t.get_output()]))
-            "".join(["%s," % i for i in t.get_input()]), "%s" % t.get_output())
-        conteudo.append(termo_format)
-
-    if gera_arquivo:
-        with open("%s.arff" % (pla.get_nome()), "w") as arquivo:
-            for i in conteudo:
-                arquivo.write(i + "\n")
-
-
-
-def train_and_make_decicion_tree():
-    train_files = ["data_batch_1",
-                   "data_batch_2",
-                   "data_batch_3",
-                   # "data_batch_4",
-                   "data_batch_5"]
-
-    lista = []
-    labels = []
-    for train in train_files:
-        dados = unpickle("CIFAR10/python/%s" % train)
-        for v in dados.get(b'data'):
-            t = np.unpackbits(v)
-            lista.append(t)
-
-        for lab in dados.get(b'labels'):
-            labels.append(lab)
-
-    train = np.array(lista)
-    lista = None
-    labs = np.array(labels)
-    labels = None
-
-    print(train.shape)
-    print(labs.shape)
-
-    make_sklearn_simple_tree(train, labs, "Matheus_teste_ccp")
-
-
-def create_cifar10_training_and_labels_files():
-    train_files = ["data_batch_1",
-                   "data_batch_2",
-                   "data_batch_3",
-                   "data_batch_4",
-                   "data_batch_5"]
-
-    lista = []
-    labels = []
-
-    dados = unpickle("CIFAR10/python/%s" % train_files[0])
-    print(dados.get(b'data')[0])
-    teste = np.unpackbits(dados.get(b'data')[0])
-    print(teste)
-    print(teste.dtype)
-    print(teste.tostring())
-    print(teste.tostring().decode('ascii'))
-
-    retorno = "".join(map(str, teste))
-    print(retorno)
-    print(len(retorno))
-
-    for train in train_files:
-        train_files = []
-        train_labels = []
-        dados = unpickle("CIFAR10/python/%s" % train)
-
-        y = 0
-        for img in dados.get(b'data'):
-            img_bin = np.unpackbits(img)
-            train_files.append("".join(map(str, img_bin)))
-
-        for lab in dados.get(b'labels'):
-            train_labels.append(lab)
-
-        with open("PLA_dump/CIFAR10_bin_inputs_%s.txt" % train, "w") as file:
-            last = len(train_files)
-            for counter, t in enumerate(train_files, start=1):
-                if counter == last:
-                    file.write(t)
-                else:
-                    file.write(t + "\n")
-            print("Acabou o arquivo CIFAR10_bin_inputs_%s.txt" % train)
-
-        with open("PLA_dump/CIFAR10_bin_labels_%s.txt" % train, "w") as file:
-            last = len(train_labels)
-            for counter, t in enumerate(train_labels, start=1):
-                if counter == last:
-                    file.write(str(t))
-                else:
-                    file.write(str(t) + "\n")
-
-        print("Acabou o arquivo CIFAR10_bin_labels_%s.txt" % train)
-
+#    with open('data_batch_1.pla', mode='w') as arq:
+#        for line in pla_lines:
+#            arq.write(line + "\n")
 
 def aigsim_cifar10_simulation(aig_path, inputs_path, output_path):
     command = "./tools/aigsim %s %s --supress" % (aig_path, inputs_path)
@@ -235,8 +239,6 @@ def aig_cifar10_accuracy(aig_simulation_path, cifar10_label_path):
     with open(cifar10_label_path) as g_file:
         for line in g_file:
             gab_list.append(line[:-1])
-
-    # Bater o gabrito
     flag = 0
     for c, e in enumerate(resp_list):
         one_hot = cifar10_class_to_one_hot(int(gab_list[c]))
@@ -245,125 +247,137 @@ def aig_cifar10_accuracy(aig_simulation_path, cifar10_label_path):
             flag += 1
     print(flag)
 
-def check_cifar10_datasets_c_and_python():
-    fsize = 10000 * (32 * 32 * 3) + 10000
-    buffr = np.zeros(fsize, dtype='uint8')
 
-    for i in range(1):
-        with open("CIFAR10/bin/data_batch_1.bin", "rb") as bin:
-            buffr[i * fsize:(i + 1) * fsize] = np.frombuffer(bin.read(), 'B')
-    print(buffr.shape)
+def make_3x3_cifar10_filter():
+    cifar10 = load_and_get_binarized(cifar10_integers)
 
-    labels = buffr[::3073]
-    pixels = np.delete(buffr, np.arange(0, buffr.size, 3073))
-    images = pixels.reshape(-1, 3072)
+    vetor_final = []
+    for img in cifar10.get(0):
+        int_img = np.reshape(img, (3, 1024))
+        int_img = np.reshape(int_img, 3072, order='F')
+        int_img = np.reshape(int_img, (32, 32, 3))
 
-    print(labels.shape)
-    print(pixels.shape)
-    print(images.shape)
+        # Here the range jump is the "filter stride"
+        # And x/y range is the filter size
+        for i in range(0, int_img.shape[0], 2):
+            for j in range(0, int_img.shape[1], 2):
+                new_input = []
+                if i < 30 and j < 30:
+                    for x in range(3):
+                        for y in range(3):
+                            new_input.append(int_img[i + x][j + y])
 
-    print(np.unpackbits(images[0][0]))
-    print(labels[0:30])
+                    # print(vetor)
+                else:
+                    for x in range(3):
+                        for y in range(3):
+                            X = i + x
+                            Y = j + y
 
-    teste = get_cifar10_ndarray_bits("data_batch_1")
+                            if X > 31 or Y > 31:
+                                new_input.append(np.array([0, 0, 0], dtype='uint8'))
+                            else:
+                                new_input.append(int_img[X][Y])
+                vetor = np.array(new_input).flatten()
+                vetor_final.append(vetor)
 
-    for counter, img in enumerate(images):
-        lista = []
-        for i in img:
-            t = np.unpackbits(i)
-            for y in t:
-                lista.append(y)
-        new_arr = np.array(lista)
+    new_array = np.array(vetor_final)
+    print(new_array.shape)
+    with open("data_batch_1_2_3_4_5-3x3filter-without-labels", "wb") as file:
+        pickle.dump(new_array, file)
 
-        test = new_arr == teste[0][counter]
 
-        if not test.all():
-            print("Tá Mal")
+def train_kmeans_and_pickle(k, dataset, pickle_name):
+    kmeans = KMeans(n_clusters=k)
+    kmeans.fit(dataset)
+    with open(pickle_name, "wb") as file:
+        pickle.dump(kmeans, file)
+
+
+def get_cifar10_3x3_filter(img):
+    filter3x3 = []
+    int_img = np.reshape(img, (3, 1024))
+    int_img = np.reshape(int_img, 3072, order='F')
+    int_img = np.reshape(int_img, (32, 32, 3))
+
+    # Here the range jump is the "filter stride"
+    # And x/y range is the filter size
+    for i in range(0, int_img.shape[0], 2):
+        for j in range(0, int_img.shape[1], 2):
+            new_input = []
+            if i < 30 and j < 30:
+                for x in range(3):
+                    for y in range(3):
+                        new_input.append(int_img[i + x][j + y])
+
+                # print(vetor)
+            else:
+                for x in range(3):
+                    for y in range(3):
+                        X = i + x
+                        Y = j + y
+
+                        if X > 31 or Y > 31:
+                            new_input.append(np.array([0, 0, 0], dtype='uint8'))
+                        else:
+                            new_input.append(int_img[X][Y])
+
+            vetor = np.array(new_input).flatten()
+            filter3x3.append(vetor)
+    return filter3x3
+
+
+def cifar10_custom_filter(img, start_row, start_column, width, height):
+
+    filtered_img = []
+
+    img_int = np.reshape(img, (3, 1024))
+    img_int = np.reshape(img_int, 3072, order='F')
+    img_int = np.reshape(img_int, (32, 32, 3))
+
+    sqr_width = start_column+width
+    sqr_height = start_row+height
+
+    if sqr_width < img_int.shape[0]+1 and sqr_height < img_int.shape[1]+1:
+        for x in range(start_row, sqr_height):
+            for y in range(start_column, sqr_width):
+                filtered_img.append(img_int[x][y])
+    else:
+        print("Filter out of size!!")
+        return None
+
+    f_img = np.array(filtered_img).flatten()
+
+    return f_img
+
+
+def cifar_kmeans_predict():
+    kmeans_model: KMeans = unpickle("KMEANS-K6-FULL-CIFAR10")
+    cifar10 = load_and_get_binarized(cifar10_integers)
+    new_inputs = []
+
+    for img in cifar10.get(0):
+        to_pred = get_cifar10_3x3_filter(img)
+        new_inputs.append(kmeans_model.predict(to_pred))
+
+    nd_array = np.array(new_inputs)
+
+    new_dict = {0: nd_array, 1: cifar10.get(1)}
+    with open("new_data_batch_1_2_3_4_5_KMEANS6", "wb") as file:
+        pickle.dump(new_dict, file)
 
 
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
 
-    #saida = aigsim_cifar10_simulation("PLA_dump/AIGs/AIG-Sklearn-Dtree-Cifar10--1-2-3-5-RAW.aig",
-    #                                  "PLA_dump/CIFAR10-TRAIN-AND-LABELS/CIFAR10_bin_inputs_data_batch_1.txt",
-    #                                  "PLA_dump/teste_aigsim_saida_python.result")
-
     start = time.time()
 
-    lista = ["CIFAR10/bit-imgs/2-msb-compacted/data_batch_1_binarized",
-             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_2_binarized",
-             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_3_binarized",
-             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_4_binarized",
-             "CIFAR10/bit-imgs/2-msb-compacted/data_batch_5_binarized"]
+    # ['RF_Tree_individual_name (str)', 'output_folder (str)', 'RF_max_depth (int)', 'n_estimators (int)']
+    solutions = [["RF10-depth08-pipelined", "PLA_dump/PRELIMINAR_SOLUTIONS/small-10-depth08", 10, 8],
+                 ["RF50-depth09-pipelined", "PLA_dump/PRELIMINAR_SOLUTIONS/medium-50-depth09", 50, 9],
+                 ["RF130-depth11-pipelined", "PLA_dump/PRELIMINAR_SOLUTIONS/large-130-depth11", 130, 11]]
 
-    lista2 = ["CIFAR10/bit-imgs/original/data_batch_1_binarized",
-              "CIFAR10/bit-imgs/original/data_batch_2_binarized",
-              "CIFAR10/bit-imgs/original/data_batch_3_binarized",
-              "CIFAR10/bit-imgs/original/data_batch_4_binarized",
-              "CIFAR10/bit-imgs/original/data_batch_5_binarized"]
+    dataset = load_and_get_binarized(data_batches)
 
-    dict_train = load_and_get_binarized(lista2)
-
-    clf = RandomForestClassifier(n_estimators=25, n_jobs=-1)
-
-    print('The scikit-learn version is {}.'.format(sklearn.__version__))
-
-    print((np.mean(cross_val_score(clf, dict_train.get(0), dict_train.get(1), cv=10))))
-
-    clf.fit(dict_train.get(0), dict_train.get(1))
-    print('Training accuracy: ', clf.score(dict_train.get(0), dict_train.get(1)))
-
-    print(clf.estimators_[0].get_depth())
-    print(clf.estimators_[0].get_n_leaves())
-    #
-    # with open("RandomForest-de1-estimator-0.tree", "w") as arquivo:
-    #     arquivo.write(tree.export_text(clf.estimators_[0], max_depth=1000))
-    #
-    # compacted_tree_to_original_cifar10_pla("RandomForest-de1-estimator-0.tree",
-    #                                        "RandomForest-de1-estimator-0-original-size.pla")
-
-    # for counter, rtree in enumerate(clf.estimators_):
-    #     with open("RandomForest-estimator-%d.tree" % counter, "w") as arquivo:
-    #         arquivo.write(tree.export_text(rtree, max_depth=1000))
-
-    # for i in range(10):
-    #     compacted_tree_to_original_cifar10_pla("RandomForest-estimator-%d.tree" % int(i), "RandomForest-estimator-%d-original-size.pla" % int(i))
-
-    print("Tempo: %d" % (time.time() - start))
-    time.sleep(60000)
-
-    # cifar10_custom_decision_tree_pipeline(dict_train.get(0), dict_train.get(1), "data_batch_1_2_3_4_5_MEMORY_compacted_dtree", dict_train.get(0).shape[1])
-
-    # compacted_tree_to_original_cifar10_pla("data_batch_1_2_3_4_5_MEMORY_compacted_dtree.tree", "teste_function_compacted_pla")
-
-    # teste = compact_images(dict_train.get(0), 2)
-    #
-    # print(teste.shape)
-    # print(dict_train.get(0).shape)
-    #
-    # print("Tempo: %d" % (time.time() - start))
-    # time.sleep(600)
-    #teste = compact_images(train.get(0), 2)
-    #print(teste.shape)
-
-    #teste = unpickle("data_batch_1_binarized")
-    #print("Tempo: %d" % (time.time()-start))
-
-    #print("Tempo: %d" % (time.time() - start))
-    #start = time.time()
-
-
-    #print("Tempo: %d" % (time.time() - start))
-    #print("Foi!! Também")
-    #print("Dictionary pickled")
-    #time.sleep(33330)
-
-    # Treinar com Decision Tree
-    #cifar10_default_decision_tree_pipeline(train.get(0), train.get(1), "data_batch_1_MEMORY_dtree")
-
-
-
-
-    time.sleep(33330)
-
-    train_and_make_decicion_tree()
+    for solution in solutions:
+        iwls21_team_pipeline(dataset, solution[3], solution[2], solution[0], solution[1], remove_pla=True)

@@ -157,7 +157,7 @@ class Pla:
                 termos_output.append(termo)
         return termos_output
 
-    def pla_to_file(self, output_path=None, out_name=None):
+    def pla_to_file(self, output_path=None, out_name=None, in_labels=None, out_labels=None):
         output_file = ""
         path = ""
 
@@ -174,6 +174,16 @@ class Pla:
         with open(path, "w") as pla_file:
             pla_file.write(".i %d\n" % self.get_qt_inputs())
             pla_file.write(".o %d\n" % self.get_qt_outputs())
+
+            # pla_lines.append("%s %s" % ("".join(["%s" % i for i in inputs])
+            if in_labels is not None:
+                labels = "".join(["%s " % i for i in in_labels])
+                labels = labels[:-1]
+                pla_file.write(".ilb %s\n" % labels)
+            if out_labels is not None:
+                labels = "".join(["%s " % i for i in out_labels])
+                labels = labels[:-1]
+                pla_file.write(".ob %s\n" % labels)
             pla_file.write(".p %d\n" % len(self.termos))
 
             if self.type is None:
